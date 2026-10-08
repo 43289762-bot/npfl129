@@ -43,7 +43,7 @@ def main(args: argparse.Namespace) -> list[float]:
         predictions = model.predict(test_data)
         
         #Finally, I am calculating the RMSE
-        rmse = sklearn.metrics.mean_squared_error(test_target, predictions, squared=False)
+        rmse = np.sqrt(sklearn.metrics.mean_squared_error(test_target, predictions))
 
 
         rmses.append(rmse)
