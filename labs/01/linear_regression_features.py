@@ -23,6 +23,7 @@ def main(args: argparse.Namespace) -> list[float]:
     ys = np.sin(xs) + np.random.RandomState(args.seed).normal(0, 0.2, size=args.data_size)
 
     rmses = []
+    #I am creating the polynomial features
     for order in range(1, args.range + 1):
         if order == 1:
             features = xs.reshape(-1,1)
@@ -30,15 +31,18 @@ def main(args: argparse.Namespace) -> list[float]:
             new_feature = xs**order
             features = np.column_stack([features, new_feature])
 
-
+        #I am separating the test data and the training data
         train_data, test_data, train_target, test_target = sklearn.model_selection.train_test_split(features, ys, test_size=args.test_size, random_state=args.seed)
 
     
+        #I am creating and training the model
         model = sklearn.linear_model.LinearRegression(tol=1e-15)
         model.fit(train_data, train_target)
 
+        #I am predicting the test
         predictions = model.predict(test_data)
         
+        #Finally, I am calculating the RMSE
         rmse = sklearn.metrics.mean_squared_error(test_target, predictions, squared=False)
 
 
