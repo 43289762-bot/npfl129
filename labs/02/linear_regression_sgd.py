@@ -28,39 +28,48 @@ def main(args: argparse.Namespace) -> tuple[list[float], float, float]:
     # Generate an artificial regression dataset.
     data, target = sklearn.datasets.make_regression(n_samples=args.data_size, random_state=args.seed)
 
-    # TODO: Append a constant feature with value 1 to the end of all input data.
-    # Then we do not need to explicitly represent bias - it becomes the last weight.
+    #I am appending the bias
+    data = np.concatenate([data, np.ones((data.shape[0], 1))], axis=1)
 
-    # TODO: Split the dataset into a train set and a test set.
-    # Use `sklearn.model_selection.train_test_split` method call, passing
-    # arguments `test_size=args.test_size, random_state=args.seed`.
-    train_data, test_data, train_target, test_target = ...
 
-    # Generate initial linear regression weights.
+    #I am splitting the test data and the training data
+    train_data, test_data, train_target, test_target = sklearn.model_selection.train_test_split(data, target, test_size=args.test_size, random_state=args.seed)
+
+
+    # I am initialazing the weights
     weights = generator.uniform(size=train_data.shape[1], low=-0.1, high=0.1)
 
+    #We are iterating every epoch
     train_rmses, test_rmses = [], []
     for epoch in range(args.epochs):
         permutation = generator.permutation(train_data.shape[0])
+        
+        for start in range(0, train_data.shape[0], args.batch_size):
+            batch_idx = permutation[start:start + args.batch_size]
+            Xb = train_data[batch_idx]
+            tb = train_target[batch_idx]
+            
+            preds = Xb @ weights
+            grad = (preds - tb)[:, None] * Xb
+            grad = grad.mean(axis=0) 
+            
+            reg = args.l2 * np.copy(weights)
+            reg[-1] = 0
+            grad += reg   
+            
+            weights -= args.learning_rate * grad 
+        
+        #I am computing the RMSE
+        train_rmses.append(np.sqrt(sklearn.metrics.mean_squared_error(train_target, train_data @ weights)))
+        test_rmses.append(np.sqrt(sklearn.metrics.mean_squared_error(test_target, test_data @ weights)))
 
-        # TODO: Process the data in the order of `permutation`. For every
-        # `args.batch_size` of them, average their gradient, and update the weights.
-        # You can assume that `args.batch_size` exactly divides `len(train_data)`.
-        #
-        # The gradient for the input example $(x_i, t_i)$ is
-        # - $(x_i^T weights - t_i) x_i$ for the unregularized loss (1/2 MSE loss),
-        # - $args.l2 * weights_with_bias_set_to_zero$ for the L2 regularization loss,
-        #   where we set the bias to zero because the bias should not be regularized,
-        # and the SGD update is
-        #   weights = weights - args.learning_rate * gradient
+    
+    #I am training the model
+    explicit_model = sklearn.linear_model.LinearRegression().fit(train_data, train_target)
+    explicit_rmse = np.sqrt(sklearn.metrics.mean_squared_error(test_target, explicit_model.predict(test_data)))
 
-        # TODO: Append current RMSE on train/test to `train_rmses`/`test_rmses`.
-        train_rmses.append(...)
-        test_rmses.append(...)
 
-    # TODO: Compute into `explicit_rmse` test data RMSE when fitting
-    # `sklearn.linear_model.LinearRegression` on `train_data` (ignoring `args.l2`).
-    explicit_rmse = ...
+    
 
     if args.plot:
         import matplotlib.pyplot as plt
