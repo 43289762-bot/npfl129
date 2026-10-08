@@ -17,26 +17,34 @@ parser.add_argument("--test_size", default=0.5, type=lambda x: int(x) if x.isdig
 
 
 def main(args: argparse.Namespace) -> tuple[float, float]:
-    # Load the diabetes dataset.
+    # I am loading the diabetes dataset.
     dataset = sklearn.datasets.load_diabetes()
 
-    # TODO: Split the dataset into a train set and a test set.
-    # Use `sklearn.model_selection.train_test_split` method call, passing
-    # arguments `test_size=args.test_size, random_state=args.seed`.
-
+    #I am splitting the training data and the test data
+    train_data, test_data, train_target, test_target = sklearn.model_selection.train_test_split(dataset.data, dataset.target, test_size=args.test_size, random_state=args.seed)
+    
+    #I am generating the lambdas 
     lambdas = np.geomspace(0.01, 10, num=500)
-    # TODO: Using `sklearn.linear_model.Ridge`, fit the train set using
-    # L2 regularization, employing the above defined lambdas.
-    # For every model, compute the root mean squared error and return the
-    # lambda producing lowest RMSE and the corresponding RMSE.
-    best_lambda = ...
-    best_rmse = ...
 
+    
+    #I am keeping and inicializing the best lambda value
+    best_lambda = None
+    best_rmse = float("inf")
+    rmses = []
+
+    #I am training the model
+    for lam in lambdas:
+        model = sklearn.linear_model.Ridge(alpha=lam)
+        model.fit(train_data, train_target)
+
+        preds = model.predict(test_data)
+        rmse = sklearn.metrics.mean_squared_error(test_target, preds, squared=False)
+        rmses.append(rmse)
+
+        if rmse < best_rmse:
+            best_rmse = rmse
+            best_lambda = lam
     if args.plot:
-        # This block is not required to pass in ReCodEx; however, it is useful
-        # to learn to visualize the results. If you collect the respective
-        # results for `lambdas` to an array called `rmses`, the following lines
-        # will plot the result if you add `--plot` argument.
         import matplotlib.pyplot as plt
         plt.plot(lambdas, rmses)
         plt.xscale("log")
