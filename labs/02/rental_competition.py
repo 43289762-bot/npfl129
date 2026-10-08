@@ -15,88 +15,59 @@ from sklearn.linear_model import Ridge
 from sklearn.pipeline import Pipeline
 
 parser = argparse.ArgumentParser()
-# These arguments will be set appropriately by ReCodEx, even if you change them.
 parser.add_argument("--predict", default=None, type=str, help="Path to the dataset to predict")
 parser.add_argument("--recodex", default=False, action="store_true", help="Running in ReCodEx")
 parser.add_argument("--seed", default=42, type=int, help="Random seed")
-# For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--model_path", default="rental_competition.model", type=str, help="Model path")
 
 
 class Dataset:
-    """Rental Dataset.
-
-    The dataset instances consist of the following 12 features:
-    - season (1: winter, 2: spring, 3: summer, 4: autumn)
-    - year (0: 2011, 1: 2012)
-    - month (1-12)
-    - hour (0-23)
-    - holiday (binary indicator)
-    - day of week (0: Sun, 1: Mon, ..., 6: Sat)
-    - working day (binary indicator; a day is neither weekend nor holiday)
-    - weather (1: clear, 2: mist, 3: light rain, 4: heavy rain)
-    - temperature (normalized so that -8 Celsius is 0 and 39 Celsius is 1)
-    - feeling temperature (normalized so that -16 Celsius is 0 and 50 Celsius is 1)
-    - relative humidity (0-1 range)
-    - windspeed (normalized to 0-1 range)
-
-    The target variable is the number of rented bikes in the given hour.
-    """
-    def __init__(self,
-                 name="rental_competition.train.npz",
-                 url="https://ufal.mff.cuni.cz/~courses/npfl129/2425/datasets/"):
-        if not os.path.exists(name):
-            print("Downloading dataset {}...".format(name), file=sys.stderr)
-            urllib.request.urlretrieve(url + name, filename="{}.tmp".format(name))
-            os.rename("{}.tmp".format(name), name)
-
-        # Load the dataset and return the data and targets.
+    def __init__(self, name):
         dataset = np.load(name)
         for key, value in dataset.items():
             setattr(self, key, value)
 
 
+def train_model(args):
+    np.random.seed(args.seed)
+    train = Dataset("rental_competition.train.npz")
+
+    features = train.data
+    targets = train.target
+
+    model = Pipeline([
+        ("scaler", StandardScaler()),
+        ("poly", PolynomialFeatures(degree=2, include_bias=False)),
+        ("ridge", Ridge(alpha=1.0))
+    ])
+
+    model.fit(features, targets)
+
+    with lzma.open(args.model_path, "wb") as model_file:
+        pickle.dump(model, model_file)
+
+    return model
+
+
 def main(args: argparse.Namespace) -> Optional[npt.ArrayLike]:
+    # TRAINING MODE
     if args.predict is None:
-        # I am training the model
-        np.random.seed(args.seed)
-        train = Dataset()
-        
-        features = train.data
-        targets = train.target
+        train_model(args)
+        return None
 
-        model = Pipeline([("scaler", StandardScaler()),("poly", PolynomialFeatures(degree=2, include_bias=False)),("ridge", Ridge(alpha=1.0))])
-
-        model.fit(features, targets)    
-        
-        with lzma.open(args.model_path, "wb") as model_file: 
-            pickle.dump(model, model_file)
-
+    # PREDICTION MODE
+    # If model does not exist, train it first
+    if not os.path.exists(args.model_path):
+        model = train_model(args)
     else:
-        #I am predicting
-        # If the model does not exist, train it first
-        if not os.path.exists(args.model_path):
-            np.random.seed(args.seed)
-            train = Dataset()
-            features = train.data
-            targets = train.target
-            model = Pipeline([
-                ("scaler", StandardScaler()),
-                ("poly", PolynomialFeatures(degree=2, include_bias=False)),
-                ("ridge", Ridge(alpha=1.0))
-            ])            
-            model.fit(features, targets)
-            with lzma.open(args.model_path, "wb") as model_file:
-                pickle.dump(model, model_file)
-            
-        # Now load the model and predict
-        test = Dataset(args.predict)
         with lzma.open(args.model_path, "rb") as model_file:
             model = pickle.load(model_file)
-        predictions = model.predict(test.data)
-        return predictions
 
-     
+    # Load test dataset
+    test = Dataset(args.predict)
+    predictions = model.predict(test.data)
+    return predictions
+
 
 if __name__ == "__main__":
     main_args = parser.parse_args()
