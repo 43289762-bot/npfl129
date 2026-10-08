@@ -38,7 +38,8 @@ def main(args: argparse.Namespace) -> tuple[float, float]:
         model.fit(train_data, train_target)
 
         preds = model.predict(test_data)
-        rmse = sklearn.metrics.mean_squared_error(test_target, preds, squared=False)
+        mse = sklearn.metrics.mean_squared_error(test_target, preds)
+        rmse = np.sqrt(mse)
         rmses.append(rmse)
 
         if rmse < best_rmse:
