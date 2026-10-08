@@ -85,5 +85,5 @@ def main(args: argparse.Namespace) -> Optional[npt.ArrayLike]:
      
 
 if __name__ == "__main__":
-    main_args = parser.parse_args([] if "__file__" not in globals() else None)
+    main_args = parser.parse_args()
     main(main_args)
