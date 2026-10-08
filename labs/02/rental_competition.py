@@ -68,17 +68,31 @@ def main(args: argparse.Namespace) -> Optional[npt.ArrayLike]:
         model = Pipeline([("scaler", StandardScaler()),("poly", PolynomialFeatures(degree=2, include_bias=False)),("ridge", Ridge(alpha=1.0))])
 
         model.fit(features, targets)    
-
         
-        with lzma.open(args.model_path, "wb") as model_file: pickle.dump(model, model_file)
+        with lzma.open(args.model_path, "wb") as model_file: 
+            pickle.dump(model, model_file)
 
     else:
         #I am predicting
+        # If the model does not exist, train it first
+        if not os.path.exists(args.model_path):
+            np.random.seed(args.seed)
+            train = Dataset()
+            features = train.data
+            targets = train.target
+            model = Pipeline([
+                ("scaler", StandardScaler()),
+                ("poly", PolynomialFeatures(degree=2, include_bias=False)),
+                ("ridge", Ridge(alpha=1.0))
+            ])            
+            model.fit(features, targets)
+            with lzma.open(args.model_path, "wb") as model_file:
+                pickle.dump(model, model_file)
+            
+        # Now load the model and predict
         test = Dataset(args.predict)
-
         with lzma.open(args.model_path, "rb") as model_file:
             model = pickle.load(model_file)
-            
         predictions = model.predict(test.data)
         return predictions
 
