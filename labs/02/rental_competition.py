@@ -46,9 +46,8 @@ class Dataset:
                  name="rental_competition.train.npz",
                  url="https://ufal.mff.cuni.cz/~courses/npfl129/2425/datasets/"):
         if not os.path.exists(name):
-            print("Downloading dataset {}...".format(name), file=sys.stderr)
-            urllib.request.urlretrieve(url + name, filename="{}.tmp".format(name))
-            os.rename("{}.tmp".format(name), name)
+            raise RuntimeError(f"Dataset file '{name}' not found in ReCodEx environment.")          
+            
 
         dataset = np.load(name)
         for key, value in dataset.items():
