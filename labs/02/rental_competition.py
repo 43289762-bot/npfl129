@@ -42,12 +42,9 @@ class Dataset:
 
     The target variable is the number of rented bikes in the given hour.
     """
-    def __init__(self,
-                 name="rental_competition.train.npz",
-                 url="https://ufal.mff.cuni.cz/~courses/npfl129/2425/datasets/"):
+    def __init__(self, name="rental_competition.train.npz"):
         if not os.path.exists(name):
-            raise RuntimeError(f"Dataset file '{name}' not found in ReCodEx environment.")          
-            
+            raise RuntimeError(f"Dataset file '{name}' not found in ReCodEx environment.")
 
         dataset = np.load(name)
         for key, value in dataset.items():
