@@ -23,21 +23,19 @@ def main(args: argparse.Namespace) -> np.ndarray:
         n_clusters_per_class=1, flip_y=0, class_sep=2, random_state=args.seed)
     target = 2 * target - 1
 
-    # TODO: Append a constant feature with value 1 to the end of all input data.
-    # Then we do not need to explicitly represent bias - it becomes the last weight.
-
-    # Generate initial perceptron weights.
+    data = np.concatenate([data, np.ones((data.shape[0], 1))], axis=1)
     weights = np.zeros(data.shape[1])
 
     done = False
     while not done:
         permutation = generator.permutation(data.shape[0])
 
-        # TODO: Implement the perceptron algorithm, notably one iteration
-        # over the training data in the order of `permutation`. During the
-        # training data iteration, perform the required updates to the `weights`
-        # for incorrectly classified examples. If all training instances are
-        # correctly classified, set `done=True`, otherwise set `done=False`.
+        done = True
+        for i in permutation:
+            # Un ejemplo está mal clasificado si target * (w·x) <= 0
+            if target[i] * (data[i] @ weights) <= 0:
+                weights += target[i] * data[i]
+                done = False
 
         if args.plot and not done:
             import matplotlib.pyplot as plt
