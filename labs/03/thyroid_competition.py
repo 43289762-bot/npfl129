@@ -51,8 +51,37 @@ def main(args: argparse.Namespace) -> Optional[npt.ArrayLike]:
         np.random.seed(args.seed)
         train = Dataset()
 
-        # TODO: Train a model on the given dataset and store it in `model`.
-        model = ...
+                
+        import sklearn.compose
+        import sklearn.linear_model
+        import sklearn.model_selection
+        import sklearn.pipeline
+        import sklearn.preprocessing
+
+        # The first 15 features are binary, the last 6 are real-valued.
+        preprocessing = sklearn.compose.ColumnTransformer([
+            ("real", sklearn.preprocessing.StandardScaler(), list(range(15, 21))),
+        ], remainder="passthrough")
+
+        pipeline = sklearn.pipeline.Pipeline([
+            ("preprocessing", preprocessing),
+            ("polynomial", sklearn.preprocessing.PolynomialFeatures(include_bias=False)),
+            ("scaler", sklearn.preprocessing.StandardScaler()),
+            ("lr", sklearn.linear_model.LogisticRegression(max_iter=2000, random_state=args.seed)),
+        ])
+
+        param_grid = {
+            "polynomial__degree": [1, 2, 3],
+            "lr__C": [0.01, 0.1, 1, 10, 100],
+        }
+
+        search = sklearn.model_selection.GridSearchCV(
+            pipeline, param_grid, cv=sklearn.model_selection.StratifiedKFold(5, shuffle=True, random_state=args.seed))
+        search.fit(train.data, train.target)
+        print("Best params: {}, cross-val accuracy: {:.2f}%".format(search.best_params_, 100 * search.best_score_))
+
+        # Keep only the refitted best pipeline (smaller to serialize).
+        model = search.best_estimator_
 
         # Serialize the model.
         with lzma.open(args.model_path, "wb") as model_file:
@@ -65,8 +94,8 @@ def main(args: argparse.Namespace) -> Optional[npt.ArrayLike]:
         with lzma.open(args.model_path, "rb") as model_file:
             model = pickle.load(model_file)
 
-        # TODO: Generate `predictions` with the test set predictions.
-        predictions = ...
+                
+        predictions = model.predict(test.data)
 
         return predictions
 
