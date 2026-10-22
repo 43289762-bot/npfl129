@@ -55,35 +55,47 @@ class Dataset:
         self.data = self.data.reshape([-1, 28*28]).astype(float)
 
 
+from sklearn.neural_network import MLPClassifier
+
 def main(args: argparse.Namespace) -> Optional[npt.ArrayLike]:
     if args.predict is None:
         # We are training a model.
         np.random.seed(args.seed)
         train = Dataset()
 
-        # TODO: Train a model on the given dataset and store it in `model`.
-        model = ...
+        # Normalizar los píxeles a [0, 1]
+        X = train.data / 255.0
 
-        # If you trained one or more MLPs, you can use the following code
-        # to compress it significantly (approximately 12 times). The snippet
-        # assumes the trained `MLPClassifier` is in the `mlp` variable.
-        #   mlp._optimizer = mlp._best_coefs = mlp._best_intercepts = None
-        #   for i in range(len(mlp.coefs_)): mlp.coefs_[i] = mlp.coefs_[i].astype(np.float16)
-        #   for i in range(len(mlp.intercepts_)): mlp.intercepts_[i] = mlp.intercepts_[i].astype(np.float16)
+        mlp = MLPClassifier(
+            hidden_layer_sizes=(300,),
+            activation="relu",
+            max_iter=30,
+            early_stopping=False,
+            random_state=args.seed,
+            verbose=True,
+        )
+        mlp.fit(X, train.target)
+        model = mlp
+
+        # Comprimir el modelo (~12 veces menos)
+        mlp._optimizer = mlp._best_coefs = mlp._best_intercepts = None
+        for i in range(len(mlp.coefs_)):
+            mlp.coefs_[i] = mlp.coefs_[i].astype(np.float16)
+        for i in range(len(mlp.intercepts_)):
+            mlp.intercepts_[i] = mlp.intercepts_[i].astype(np.float16)
 
         # Serialize the model.
         with lzma.open(args.model_path, "wb") as model_file:
             pickle.dump(model, model_file)
 
     else:
-        # Use the model and return test set predictions, either as a Python list or a NumPy array.
+        # Use the model and return test set predictions.
         test = Dataset(args.predict)
 
         with lzma.open(args.model_path, "rb") as model_file:
             model = pickle.load(model_file)
 
-        # TODO: Generate `predictions` with the test set predictions.
-        predictions = ...
+        predictions = model.predict(test.data / 255.0)
 
         return predictions
 
