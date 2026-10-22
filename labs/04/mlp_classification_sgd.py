@@ -50,52 +50,52 @@ def main(args: argparse.Namespace) -> tuple[tuple[np.ndarray, ...], list[float]]
     weights = [generator.uniform(size=[train_data.shape[1], args.hidden_layer], low=-0.1, high=0.1),
                generator.uniform(size=[args.hidden_layer, args.classes], low=-0.1, high=0.1)]
     biases = [np.zeros(args.hidden_layer), np.zeros(args.classes)]
-
     def forward(inputs):
-        # TODO: Implement forward propagation, returning *both* the value of the hidden
-        # layer and the value of the output layer.
-        #
-        # We assume a neural network with a single hidden layer of size `args.hidden_layer`
-        # and ReLU activation, where $ReLU(x) = max(x, 0)$, and an output layer with softmax
-        # activation.
-        #
-        # The value of the hidden layer is computed as `ReLU(inputs @ weights[0] + biases[0])`.
-        # The value of the output layer is computed as `softmax(hidden_layer @ weights[1] + biases[1])`.
-        #
-        # Note that you need to be careful when computing softmax, because the exponentiation
-        # in softmax can easily overflow. To avoid it, you should use the fact that
-        # $softmax(z) = softmax(z + any_constant)$ and compute $softmax(z) = softmax(z - maximum_of_z)$.
-        # That way we only exponentiate values which are non-positive, and overflow does not occur.
-        raise NotImplementedError()
+        hidden = np.maximum(inputs @ weights[0] + biases[0], 0)
+        logits = hidden @ weights[1] + biases[1]
+        logits = logits - logits.max(axis=-1, keepdims=True)
+        exps = np.exp(logits)
+        output = exps / exps.sum(axis=-1, keepdims=True)
+        return hidden, output
 
     for epoch in range(args.epochs):
         permutation = generator.permutation(train_data.shape[0])
 
-        # TODO: Process the data in the order of `permutation`. For every
-        # `args.batch_size` of them, average their gradient, and update the weights.
-        # You can assume that `args.batch_size` exactly divides `train_data.shape[0]`.
-        #
-        # The gradient used in SGD has now four parts, gradient of `weights[0]` and `weights[1]`
-        # and gradient of `biases[0]` and `biases[1]`.
-        #
-        # You can either compute the gradient directly from the neural network formula,
-        # i.e., as a gradient of $-log P(target | data)$, or you can compute
-        # it step by step using the chain rule of derivatives, in the following order:
-        # - compute the derivative of the loss with respect to *inputs* of the
-        #   softmax on the last layer,
-        # - compute the derivative with respect to `weights[1]` and `biases[1]`,
-        # - compute the derivative with respect to the hidden layer output,
-        # - compute the derivative with respect to the hidden layer input,
-        # - compute the derivative with respect to `weights[0]` and `biases[0]`.
+        for start in range(0, len(permutation), args.batch_size):
+            batch = permutation[start:start + args.batch_size]
+            x, t = train_data[batch], train_target[batch]
 
-        # TODO: After the SGD epoch, measure the accuracy for both the
-        # train test and the test set.
-        train_accuracy, test_accuracy = ...
+            hidden, output = forward(x)
+
+            # Derivada de la pérdida respecto a las entradas del softmax (promediada en el batch)
+            d_logits = output.copy()
+            d_logits[np.arange(len(batch)), t] -= 1
+            d_logits /= len(batch)
+
+            # Gradientes de la capa de salida
+            grad_w1 = hidden.T @ d_logits
+            grad_b1 = d_logits.sum(axis=0)
+
+            # Retropropagación a la capa oculta (ReLU: derivada 1 si hidden > 0)
+            d_hidden = (d_logits @ weights[1].T) * (hidden > 0)
+
+            # Gradientes de la primera capa
+            grad_w0 = x.T @ d_hidden
+            grad_b0 = d_hidden.sum(axis=0)
+
+            weights[0] -= args.learning_rate * grad_w0
+            biases[0] -= args.learning_rate * grad_b0
+            weights[1] -= args.learning_rate * grad_w1
+            biases[1] -= args.learning_rate * grad_b1
+
+        train_accuracy = sklearn.metrics.accuracy_score(train_target, forward(train_data)[1].argmax(axis=1))
+        test_accuracy = sklearn.metrics.accuracy_score(test_target, forward(test_data)[1].argmax(axis=1))
 
         print("After epoch {}: train acc {:.1f}%, test acc {:.1f}%".format(
             epoch + 1, 100 * train_accuracy, 100 * test_accuracy))
 
     return tuple(weights + biases), [100 * train_accuracy, 100 * test_accuracy]
+    
 
 
 if __name__ == "__main__":
