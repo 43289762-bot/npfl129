@@ -150,13 +150,16 @@ def main(args: argparse.Namespace) -> Optional[npt.ArrayLike]:
 
         print(f"Validation accuracy: {100 * accuracy:.2f}%")
 
+        print("About to save model", file=sys.stderr)
         with lzma.open(args.model_path, "wb") as model_file:
             pickle.dump(model, model_file)
-            print("Model saved.", file=sys.stderr)
+        print("Model saved successfully", file=sys.stderr)
 
     else:
+        print("Prediction mode", file=sys.stderr)
+        print(f"Looking for {args.model_path}", file=sys.stderr)
+        print(f"Exists? {os.path.exists(args.model_path)}", file=sys.stderr)
         test = Dataset(args.predict)
-
         with lzma.open(args.model_path, "rb") as model_file:
             model = pickle.load(model_file)
 
