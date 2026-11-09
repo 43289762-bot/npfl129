@@ -38,10 +38,28 @@ parser.add_argument("--C", default=1.0, type=float, help="Inverse regularization
 
 BASE = "acdeinorstuyz"
 
-
 class Dataset:
-    # ... (sin cambios: copia aquí la clase Dataset de la plantilla)
-    ...
+    LETTERS_NODIA = "acdeeinorstuuyz"
+    LETTERS_DIA = "áčďéěíňóřšťúůýž"
+
+    # A translation table usable with `str.translate` to rewrite characters with dia to the ones without them.
+    DIA_TO_NODIA = str.maketrans(LETTERS_DIA + LETTERS_DIA.upper(), LETTERS_NODIA + LETTERS_NODIA.upper())
+
+    def __init__(self,
+                 name="fiction-train.txt",
+                 url="https://ufal.mff.cuni.cz/~courses/npfl129/2627/datasets/"):
+        if not os.path.exists(name):
+            print("Downloading dataset {}...".format(name), file=sys.stderr)
+            licence_name = name.replace(".txt", ".LICENSE")
+            urllib.request.urlretrieve(url + licence_name, filename=licence_name)
+            urllib.request.urlretrieve(url + name, filename="{}.tmp".format(name))
+            os.rename("{}.tmp".format(name), name)
+
+        # Load the dataset and split it into `data` and `target`.
+        with open(name, "r", encoding="utf-8-sig") as dataset_file:
+            self.target = dataset_file.read()
+        self.data = self.target.translate(self.DIA_TO_NODIA)
+
 
 
 def extract(text: str, window: int):
