@@ -19,11 +19,14 @@ import lzma
 import os
 import pickle
 import sys
+from typing import Optional
 import urllib.request
 
 import numpy as np
+import numpy.typing as npt
 import scipy.sparse
-import sklearn.feature_extraction.text
+
+import sklearn.feature_extraction
 import sklearn.metrics
 import sklearn.model_selection
 import sklearn.pipeline
@@ -75,11 +78,8 @@ def load_word_embeddings(
     name="imdb_embeddings.npz",
     url="https://ufal.mff.cuni.cz/~courses/npfl129/2627/datasets/"
 ):
-    """Load pretrained FastText word embeddings."""
-
     if not os.path.exists(name):
-        print("Downloading embeddings {}...".format(name),
-              file=sys.stderr)
+        print("Downloading embeddings.", file=sys.stderr)
         urllib.request.urlretrieve(
             url + name, filename=name + ".tmp"
         )
@@ -90,16 +90,13 @@ def load_word_embeddings(
         words = data["words"]
         vectors = data["vectors"]
 
-    embeddings = {
+    return {
         str(word): vector
         for word, vector in zip(words, vectors)
     }
 
-    return embeddings
-
 
 class EmbeddingFeatures(BaseEstimator, TransformerMixin):
-    """Convert reviews into pooled FastText embedding vectors."""
 
     def __init__(self, embeddings):
         self.embeddings = embeddings
@@ -109,7 +106,7 @@ class EmbeddingFeatures(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         dimension = len(next(iter(self.embeddings.values())))
-        features = []
+        result = []
 
         for text in X:
             vectors = []
@@ -126,35 +123,26 @@ class EmbeddingFeatures(BaseEstimator, TransformerMixin):
             if vectors:
                 vectors = np.asarray(vectors)
 
-                # Mean pooling captures the general meaning.
-                mean_vector = np.mean(vectors, axis=0)
+                mean = np.mean(vectors, axis=0)
+                maximum = np.max(vectors, axis=0)
 
-                # Max pooling captures important semantic features.
-                max_vector = np.max(vectors, axis=0)
-
-                combined = np.concatenate([
-                    mean_vector,
-                    max_vector
-                ])
+                vector = np.concatenate([mean, maximum])
             else:
-                combined = np.zeros(2 * dimension)
+                vector = np.zeros(2 * dimension)
 
-            features.append(combined)
+            result.append(vector)
 
-        features = np.asarray(features, dtype=np.float32)
+        result = np.asarray(result, dtype=np.float32)
+        result = normalize(result, norm="l2")
 
-        # Normalize each review representation.
-        return scipy.sparse.csr_matrix(
-            normalize(features, norm="l2")
-        )
+        return scipy.sparse.csr_matrix(result)
 
 
 def create_model(embeddings):
-    """Create the hybrid sentiment classification model."""
 
     features = sklearn.pipeline.FeatureUnion([
         (
-            "word_tfidf",
+            "word",
             sklearn.feature_extraction.text.TfidfVectorizer(
                 analyzer="word",
                 ngram_range=(1, 2),
@@ -166,7 +154,7 @@ def create_model(embeddings):
             )
         ),
         (
-            "char_tfidf",
+            "character",
             sklearn.feature_extraction.text.TfidfVectorizer(
                 analyzer="char",
                 ngram_range=(3, 5),
@@ -177,12 +165,12 @@ def create_model(embeddings):
             )
         ),
         (
-            "embeddings",
+            "fasttext",
             EmbeddingFeatures(embeddings)
         )
     ])
 
-    model = sklearn.pipeline.Pipeline([
+    return sklearn.pipeline.Pipeline([
         ("features", features),
         (
             "classifier",
@@ -194,70 +182,82 @@ def create_model(embeddings):
         )
     ])
 
+
+def train_model(args):
+
+    np.random.seed(args.seed)
+
+    print("Loading training dataset.", file=sys.stderr)
+    train = Dataset()
+
+    print("Loading embeddings.", file=sys.stderr)
+    embeddings = load_word_embeddings()
+
+    print("Preprocessing dataset.", file=sys.stderr)
+
+    train_x, validation_x, train_y, validation_y = (
+        sklearn.model_selection.train_test_split(
+            train.data,
+            train.target,
+            test_size=0.25,
+            random_state=args.seed,
+            stratify=train.target
+        )
+    )
+
+    model = create_model(embeddings)
+
+    print("Training.", file=sys.stderr)
+    model.fit(train_x, train_y)
+
+    print("Evaluation.", file=sys.stderr)
+
+    validation_predictions = model.predict(validation_x)
+
+    accuracy = sklearn.metrics.accuracy_score(
+        validation_y, validation_predictions
+    )
+
+    print("Validation accuracy {:.2f}%".format(100 * accuracy))
+
+    # Retrain using all available training examples.
+    print("Training on the complete dataset.", file=sys.stderr)
+    model.fit(train.data, train.target)
+
+    print("Saving model.", file=sys.stderr)
+
+    with lzma.open(args.model_path, "wb") as model_file:
+        pickle.dump(model, model_file)
+
     return model
 
 
-def main(args):
+def main(args: argparse.Namespace) -> Optional[npt.ArrayLike]:
 
     if args.predict is None:
+
         # Training mode.
-
-        np.random.seed(args.seed)
-
-        print("Loading embeddings.", file=sys.stderr)
-        word_embeddings = load_word_embeddings()
-
-        print("Loading training dataset.", file=sys.stderr)
-        train = Dataset()
-
-        print("Splitting dataset.", file=sys.stderr)
-
-        train_x, validation_x, train_y, validation_y = (
-            sklearn.model_selection.train_test_split(
-                train.data,
-                train.target,
-                test_size=0.25,
-                random_state=args.seed,
-                stratify=train.target
-            )
-        )
-
-        print("Creating model.", file=sys.stderr)
-        model = create_model(word_embeddings)
-
-        print("Training.", file=sys.stderr)
-        model.fit(train_x, train_y)
-
-        print("Evaluation.", file=sys.stderr)
-
-        validation_predictions = model.predict(validation_x)
-
-        validation_accuracy = sklearn.metrics.accuracy_score(
-            validation_y,
-            validation_predictions
-        )
-
-        print(
-            "Validation accuracy {:.2f}%".format(
-                100 * validation_accuracy
-            )
-        )
-
-        print("Saving model.", file=sys.stderr)
-
-        with lzma.open(args.model_path, "wb") as model_file:
-            pickle.dump(model, model_file)
+        train_model(args)
 
     else:
-        # Prediction mode.
 
-        print("Loading test dataset.", file=sys.stderr)
+        # Prediction mode.
         test = Dataset(args.predict)
 
-        print("Loading trained model.", file=sys.stderr)
+        # ReCodEx may start prediction without a previously
+        # generated model file. Train as a fallback.
+        if not os.path.exists(args.model_path):
+            print(
+                "Model not found. Training a new model.",
+                file=sys.stderr
+            )
+            model = train_model(args)
 
-        with lzma.open(args.model_path, "rb") as model_file:
-            model = pickle.load(model_file)
+        else:
+            print("Loading saved model.", file=sys.stderr)
+
+            with lzma.open(args.model_path, "rb") as model_file:
+                model = pickle.load(model_file)
 
         print("Predicting.", file=sys.stderr)
 
@@ -267,5 +267,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main_args = parser.parse_args()
+    main_args = parser.parse_args(
+        [] if "__file__" not in globals() else None
+    )
     main(main_args)
