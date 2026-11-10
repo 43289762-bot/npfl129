@@ -89,7 +89,7 @@ def main(args: argparse.Namespace) -> float:
             for term, count in counts.items():
                 rows.append(row)
                 cols.append(vocabulary[term])
-                values.append(count / total if args.tf else 1.0)
+                values.append(count / len(terms) if args.tf else 1.0)
         return scipy.sparse.csr_matrix(
             (values, (rows, cols)), shape=(len(documents_terms), len(vocabulary)), dtype=np.float64)
 
