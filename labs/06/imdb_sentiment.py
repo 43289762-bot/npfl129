@@ -24,8 +24,11 @@ import urllib.request
 import numpy as np
 import numpy.typing as npt
 import sklearn.feature_extraction
+import sklearn.linear_model
 import sklearn.metrics
 import sklearn.model_selection
+import sklearn.pipeline
+import sklearn.preprocessing
 
 parser = argparse.ArgumentParser()
 # These arguments will be set appropriately by ReCodEx, even if you change them.
@@ -34,7 +37,10 @@ parser.add_argument("--recodex", default=False, action="store_true", help="Runni
 parser.add_argument("--seed", default=42, type=int, help="Random seed")
 # For these and any other arguments you add, ReCodEx will keep your default value.
 parser.add_argument("--model_path", default="imdb_sentiment.model", type=str, help="Model path")
-# TODO: Add other arguments (typically hyperparameters) as you need.
+parser.add_argument("--C", default=0.1, type=float, help="Inverse regularization strength")
+parser.add_argument("--max_iter", default=2000, type=int, help="Maximum iterations of the solver")
+parser.add_argument("--stop_words", default=True, action=argparse.BooleanOptionalAction,
+                    help="Exclude English stop words when pooling")
 
 
 class Dataset:
@@ -82,6 +88,30 @@ def load_word_embeddings(
     return embeddings
 
 
+def reviews_to_vectors(texts, word_embeddings, use_stop_words_filter):
+    """Convert every review to a single vector (mean pooling + max pooling)."""
+    stop_words = sklearn.feature_extraction._stop_words.ENGLISH_STOP_WORDS
+    dim = len(next(iter(word_embeddings.values())))
+
+    vectors = np.zeros((len(texts), 2 * dim), dtype=np.float32)
+    for i, text in enumerate(texts):
+        words = text.split()
+
+        # Collect the embeddings of the words, optionally without stop words.
+        selected = [word_embeddings[w] for w in words
+                    if w in word_embeddings and not (use_stop_words_filter and w.lower() in stop_words)]
+        # If nothing remains, fall back to all known words.
+        if not selected:
+            selected = [word_embeddings[w] for w in words if w in word_embeddings]
+        if not selected:
+            continue
+
+        selected = np.stack(selected)
+        vectors[i, :dim] = selected.mean(axis=0)
+        vectors[i, dim:] = selected.max(axis=0)
+    return vectors
+
+
 def main(args: argparse.Namespace) -> Optional[npt.ArrayLike]:
     word_embeddings = load_word_embeddings()
 
@@ -91,19 +121,23 @@ def main(args: argparse.Namespace) -> Optional[npt.ArrayLike]:
         train = Dataset()
 
         print("Preprocessing dataset.", file=sys.stderr)
-        # TODO: Preprocess the text such that you have a single vector per movie
-        # review. You can experiment with different ways of pooling the word
-        # embeddings: averaging, max pooling, etc. You can also try to exclude
-        # words that do not contribute much to the meaning of the sentence (stop
-        # words). See `sklearn.feature_extraction._stop_words.ENGLISH_STOP_WORDS`.
-        train_as_vectors = ...
+        # Preprocess the text such that we have a single vector per movie
+        # review: concatenation of mean pooling and max pooling of the word
+        # embeddings, optionally excluding stop words.
+        train_as_vectors = reviews_to_vectors(train.data, word_embeddings, args.stop_words)
 
         train_x, validation_x, train_y, validation_y = sklearn.model_selection.train_test_split(
             train_as_vectors, train.target, test_size=0.25, random_state=args.seed)
 
         print("Training.", file=sys.stderr)
-        # TODO: Train a model of your choice on the given data.
-        model = ...
+        # Train a model of your choice on the given data: feature standardization
+        # followed by a logistic regression.
+        model = sklearn.pipeline.Pipeline([
+            ("scaler", sklearn.preprocessing.StandardScaler()),
+            ("classifier", sklearn.linear_model.LogisticRegression(
+                C=args.C, max_iter=args.max_iter, random_state=args.seed)),
+        ])
+        model.fit(train_x, train_y)
 
         print("Evaluation.", file=sys.stderr)
         validation_predictions = model.predict(validation_x)
@@ -121,13 +155,11 @@ def main(args: argparse.Namespace) -> Optional[npt.ArrayLike]:
         with lzma.open(args.model_path, "rb") as model_file:
             model = pickle.load(model_file)
 
-        # TODO: Start by preprocessing the test data, ideally using the same
-        # code as during training.
-        test_as_vectors = ...
+        # Start by preprocessing the test data, using the same code as during training.
+        test_as_vectors = reviews_to_vectors(test.data, word_embeddings, args.stop_words)
 
-        # TODO: Generate `predictions` with the test set predictions, either
-        # as a Python list or a NumPy array.
-        predictions = ...
+        # Generate `predictions` with the test set predictions.
+        predictions = model.predict(test_as_vectors)
 
         return predictions
 
